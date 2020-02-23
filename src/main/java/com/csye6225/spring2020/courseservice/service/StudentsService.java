@@ -97,7 +97,7 @@ public class StudentsService {
 //	}
 	
 	// get student in a program
-	public List<Student> getStudentsByProgram(String program, String id) {
+	public List<Student> getStudentsByProgram(String program) {
 		List<Student> students = new ArrayList<>();
 		for (Student student : student_Map.values()) {
 			if (student.getProgramName().equals(program)) {

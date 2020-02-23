@@ -85,7 +85,7 @@ public class ProfessorsService extends Exception{
 	}
 	
 	// Get professors in a department 
-	public List<Professor> getProfessorsByDepartment(String department, String id) {
+	public List<Professor> getProfessorsByDepartment(String department) {
 		//Getting the list
 		List<Professor> list = new ArrayList<>();
 		for (Professor prof : prof_Map.values()) {

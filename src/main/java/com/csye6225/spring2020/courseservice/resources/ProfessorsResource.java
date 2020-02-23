@@ -38,7 +38,7 @@ public class ProfessorsResource {
 			return profService.getAllProfessors();
 		}
 		System.out.println("Professor Resource: Looking for: " + department);
-		return profService.getProfessorsByDepartment(department, id);
+		return profService.getProfessorsByDepartment(department);
 
 	}
 	

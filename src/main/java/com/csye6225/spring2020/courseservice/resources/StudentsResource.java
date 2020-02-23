@@ -38,7 +38,7 @@ public class StudentsResource {
 			return studentsService.getAllStudents();
 		}
 		System.out.println("Student Resource: Looking for: " + programName);
-		return studentsService.getStudentsByProgram(programName, id);
+		return studentsService.getStudentsByProgram(programName);
 
 	}
 	
