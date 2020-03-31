@@ -4,75 +4,89 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 
+import com.amazonaws.services.dynamodbv2.datamodeling.DynamoDBMapper;
+import com.amazonaws.services.dynamodbv2.datamodeling.DynamoDBQueryExpression;
+import com.amazonaws.services.dynamodbv2.datamodeling.DynamoDBScanExpression;
+import com.amazonaws.services.dynamodbv2.model.AttributeValue;
+import com.csye6225.spring2020.courseservice.EmailAnnouncement;
+import com.csye6225.spring2020.courseservice.datamodel.Course;
+import com.csye6225.spring2020.courseservice.datamodel.DynamoDbConnector;
 import com.csye6225.spring2020.courseservice.datamodel.InMemoryDatabase;
 import com.csye6225.spring2020.courseservice.datamodel.Student;
-import org.omg.Messaging.SYNC_WITH_TRANSPORT;
 
 public class StudentsService {
 	static HashMap<String, Student> student_Map = InMemoryDatabase.getStudentDB();
-	
+	static DynamoDbConnector dynamoDb;
+	DynamoDBMapper mapper;
+
+	public StudentsService() {
+		dynamoDb = new DynamoDbConnector();
+		dynamoDb.init();
+		mapper = new DynamoDBMapper(dynamoDb.getClient());
+	}
 	// Getting a list of all student
 	public List<Student> getAllStudents() {
-		List<Student> list = new ArrayList<>();
-		for (Student student : student_Map.values()) {
-			list.add(student);
-		}
-		if (list.size() != 0) {
-			System.out.println("All students retrieved:");
-		} else {
-			System.out.println("No students data!");
-		}
-		return list;
+		DynamoDBScanExpression scanExpression = new DynamoDBScanExpression()
+				.withIndexName("studentId-index")
+				.withConsistentRead(false);
+
+		List<Student> studentList =  mapper.scan(Student.class, scanExpression);
+		return studentList ;
 	}
 	
 	// Adding a student
 	public Student addStudent(Student student) {
-        student_Map.put(student.getStudentId(), student);
+		Student student2 = new Student(student.getStudentId(), student.getFirstName(), student.getLastName(),
+				student.getProgramName(), student.getImageUrl(), student.getEmail(), student.getJoiningDate());
+		mapper.save(student2);
 
-		System.out.println("Item added:");
-		System.out.println(student.toString());
-        return student;
-    }
+		System.out.println("Item added.");
+		System.out.println(student2.toString());
+		return student2;
+	}
 	
 	// Getting student
 	public Student getStudent(String studentId) {
-		if (student_Map.containsKey(studentId)) {
-			Student student = student_Map.get(studentId);
-			System.out.println("Item retrieved");
-			System.out.println(student.toString());
-			return student;
-		} else {
-			System.out.println("Student " + studentId + " does not exist !!!");
-			return null;
-		}
+		List<Student> studentList = getStudentFromDynamoDB(studentId);
+		return studentList.size() != 0 ? studentList.get(0) : null;
 	}
 	
 	// Deleting a student
 	public Student deleteStudent(String studentId) {
-		if (student_Map.containsKey(studentId)) {
-			Student student = student_Map.get(studentId);
-			student_Map.remove(studentId);
-			System.out.println("Item deleted:");
-			System.out.println(student.toString());
-			return student;
-		} else {
-			System.out.println("Student " + studentId + " does not exist !!!");
-			return null;
+		List<Student> list = getStudentFromDynamoDB(studentId);
+		Student student = null;
+		if(list.size() != 0){
+			student = list.get(0);
+			mapper.delete(student);
+			Student deletedStudent = mapper.load(Student.class, student.getId());
+
+			if (deletedStudent == null) {
+				System.out.println("The student is deleted.");
+				System.out.println(student.toString());
+			}
 		}
+		return student;
 
 	}
 	
 	// Updating student Info
 		public Student updateStudentInformation(String studentId, Student student) {
-			if (student_Map.containsKey(studentId)) {
-				student.setStudentId(studentId);
-				student_Map.put(studentId, student);
-				System.out.println("Item updated:");
-				System.out.println(student.toString());
-			} else  {
-				System.out.println("Cannot find the student data with " + studentId);
+			List<Student> list = getStudentFromDynamoDB(studentId);
+			Student student2 = null;
+			if(list.size() != 0) {
+				student2 = list.get(0);
+				student2.setStudentId(student.getStudentId());
+				student2.setFirstName(student.getFirstName());
+				student2.setLastName(student.getLastName());
+				student2.setJoiningDate(student.getJoiningDate());
+				student2.setProgramName(student.getProgramName());
+				student2.setImageUrl(student.getImageUrl());
+				student2.setEmail(student.getEmail());
+				mapper.save(student2);
+				System.out.println("Updated.");
+				System.out.println(student2.toString());
 			}
-			return student;
+			return student2;
 		}
 		
 	// update the email of student
@@ -81,21 +95,32 @@ public class StudentsService {
 		student.setEmail(email);
 		return student;
 	}
-	
-//	//update enrolled courses of student
-//	public Student updateStudentCourse(String studentId, String course, String newCourse) {
-//		Student student = student_Map.get(studentId);
-//		List<String> courses = student.getCourseEnrolled();
-//		for (int i = 0; i <= courses.size() - 1; i++) {
-//			String oldCourse = courses.get(i);
-//			if (oldCourse.equals(course)) {
-//				courses.set(i,newCourse);
-//			}
-//		}
-//		System.out.println(student.toString() + student.getAllCourses());
-//		return student;
-//	}
-	
+
+
+	// register for a course
+	public Student registerCourse(String studentId, Course course){
+		List<Student> list = getStudentFromDynamoDB(studentId);
+		CoursesService courseSer = new CoursesService();
+		Student student = null;
+		if(list.size() != 0) {
+			student = list.get(0);
+			System.out.println(course.getCourseId());
+			if(student.getCourseEnrolled().size() < 3) {
+				student.getCourseEnrolled().add(course.getCourseId());
+				course.getRosterId().add(studentId);
+
+				// update information in database
+				updateStudentInformation(studentId,student);
+				courseSer.updateCourseInformation(course.getCourseId(), course);
+
+				EmailAnnouncement.subscribe(course.getSnsTopicArn(), student.getEmail());
+			}
+		}
+
+		return student;
+	}
+
+
 	// get student in a program
 	public List<Student> getStudentsByProgram(String program) {
 		List<Student> students = new ArrayList<>();
@@ -108,5 +133,18 @@ public class StudentsService {
 		return students;
 	}
 
+	public List<Student> getStudentFromDynamoDB(String stuId){
+		HashMap<String, AttributeValue> eav = new HashMap<String, AttributeValue>();
+		eav.put(":v1",  new AttributeValue().withS(stuId));
+
+		DynamoDBQueryExpression<Student> queryExpression = new DynamoDBQueryExpression<Student>()
+				.withIndexName("studentId-index")
+				.withConsistentRead(false)
+				.withKeyConditionExpression("studentId = :v1")
+				.withExpressionAttributeValues(eav);
+
+		List<Student> studentList =  mapper.query(Student.class, queryExpression);
+		return studentList;
+	}
 	
 }
